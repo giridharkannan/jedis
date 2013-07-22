@@ -7,6 +7,9 @@ import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import redis.clients.jedis.Protocol.Command;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;
@@ -16,6 +19,8 @@ import redis.clients.util.RedisOutputStream;
 import redis.clients.util.SafeEncoder;
 
 public class Connection {
+	public static Logger log = LoggerFactory.getLogger(Connection.class);
+	
     private String host;
     private int port = Protocol.DEFAULT_PORT;
     private Socket socket;
@@ -63,11 +68,12 @@ public class Connection {
     }
 
     protected void flush() {
-        try {
-            outputStream.flush();
-        } catch (IOException e) {
-            throw new JedisConnectionException(e);
-        }
+    	try {
+    		outputStream.flush();
+    	} catch (IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 
     protected Connection sendCommand(final Command cmd, final String... args) {
@@ -80,16 +86,40 @@ public class Connection {
 
     protected Connection sendCommand(final Command cmd, final byte[]... args) {
         connect();
-        Protocol.sendCommand(outputStream, cmd, args);
-        pipelinedCommands++;
-        return this;
+        try {
+	        Protocol.sendCommand(outputStream, cmd, args);
+	        pipelinedCommands++;
+	        return this;
+        } catch(IOException e) {
+        	close();
+        	throw new JedisConnectionException(e);
+        }
+    }
+    
+    private void close() {
+    	if(socket == null) { return; }
+    	
+    	try {
+    		socket.close();
+    		socket = null;
+    	} catch(IOException e) {
+    		if(log.isErrorEnabled()) {
+    			log.error(String.format("error closing socket : %s" +
+    					" for host : %s:%s", toString(), getHost(), getPort()), e);
+    		}
+    	}
     }
     
     protected Connection sendCommand(final Command cmd) {
         connect();
-        Protocol.sendCommand(outputStream, cmd, new byte[0][]);
-        pipelinedCommands++;
-        return this;
+        try {
+	        Protocol.sendCommand(outputStream, cmd, new byte[0][]);
+	        pipelinedCommands++;
+	        return this;
+        } catch (IOException e) {
+        	close();
+        	throw new JedisConnectionException(e);
+        }
     }
 
     public Connection(final String host, final int port) {
@@ -134,6 +164,7 @@ public class Connection {
                 outputStream = new RedisOutputStream(socket.getOutputStream());
                 inputStream = new RedisInputStream(socket.getInputStream());
             } catch (IOException ex) {
+            	close();
                 throw new JedisConnectionException(ex);
             }
         }
@@ -160,14 +191,19 @@ public class Connection {
     }
 
     protected String getStatusCodeReply() {
-        flush();
-        pipelinedCommands--;
-        final byte[] resp = (byte[]) Protocol.read(inputStream);
-        if (null == resp) {
-            return null;
-        } else {
-            return SafeEncoder.encode(resp);
-        }
+    	flush();
+    	try {
+	        pipelinedCommands--;
+	        final byte[] resp = (byte[]) Protocol.read(inputStream);
+	        if (null == resp) {
+	            return null;
+	        } else {
+	            return SafeEncoder.encode(resp);
+	        }
+    	} catch(IOException e) {
+    		close();
+    		throw new JedisConnectionException(e);
+    	}
     }
 
     public String getBulkReply() {
@@ -181,14 +217,24 @@ public class Connection {
 
     public byte[] getBinaryBulkReply() {
         flush();
-        pipelinedCommands--;
-        return (byte[]) Protocol.read(inputStream);
+    	try {
+	        pipelinedCommands--;
+	        return (byte[]) Protocol.read(inputStream);
+    	} catch(IOException ex) {
+        	close();
+            throw new JedisConnectionException(ex);
+    	}
     }
 
     public Long getIntegerReply() {
-        flush();
-        pipelinedCommands--;
-        return (Long) Protocol.read(inputStream);
+    	try {
+	        flush();
+	        pipelinedCommands--;
+	        return (Long) Protocol.read(inputStream);
+    	} catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 
     public List<String> getMultiBulkReply() {
@@ -198,22 +244,37 @@ public class Connection {
     @SuppressWarnings("unchecked")
     public List<byte[]> getBinaryMultiBulkReply() {
         flush();
-        pipelinedCommands--;
-        return (List<byte[]>) Protocol.read(inputStream);
+    	try {
+	        pipelinedCommands--;
+	        return (List<byte[]>) Protocol.read(inputStream);
+    	} catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 
     @SuppressWarnings("unchecked")
     public List<Object> getObjectMultiBulkReply() {
         flush();
-        pipelinedCommands--;
-        return (List<Object>) Protocol.read(inputStream);
+    	try {
+	        pipelinedCommands--;
+	        return (List<Object>) Protocol.read(inputStream);
+    	} catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
     
     @SuppressWarnings("unchecked")
     public List<Long> getIntegerMultiBulkReply() {
         flush();
-        pipelinedCommands--;
-        return (List<Long>) Protocol.read(inputStream);
+    	try {
+	        pipelinedCommands--;
+	        return (List<Long>) Protocol.read(inputStream);
+    	} catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 
     public List<Object> getAll() {
@@ -223,20 +284,30 @@ public class Connection {
     public List<Object> getAll(int except) {
         List<Object> all = new ArrayList<Object>();
         flush();
-        while (pipelinedCommands > except) {
-        	try{
-                all.add(Protocol.read(inputStream));
-        	}catch(JedisDataException e){
-        		all.add(e);
-        	}
-            pipelinedCommands--;
-        }
-        return all;
+        try {
+	        while (pipelinedCommands > except) {
+	        	try{
+	                all.add(Protocol.read(inputStream));
+	        	}catch(JedisDataException e){
+	        		all.add(e);
+	        	}
+	            pipelinedCommands--;
+	        }
+	        return all;
+        } catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 
     public Object getOne() {
         flush();
-        pipelinedCommands--;
-        return Protocol.read(inputStream);
+    	try {
+	        pipelinedCommands--;
+	        return Protocol.read(inputStream);
+    	} catch(IOException ex) {
+    		close();
+    		throw new JedisConnectionException(ex);
+    	}
     }
 }

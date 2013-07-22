@@ -40,14 +40,14 @@ public class ProtocolTest extends JedisTestBase {
     }
 
     @Test
-    public void bulkReply() {
+    public void bulkReply() throws IOException {
         InputStream is = new ByteArrayInputStream("$6\r\nfoobar\r\n".getBytes());
         byte[] response = (byte[]) Protocol.read(new RedisInputStream(is));
         assertArrayEquals(SafeEncoder.encode("foobar"), response);
     }
 
     @Test
-    public void fragmentedBulkReply() {
+    public void fragmentedBulkReply() throws IOException {
         FragmentedByteArrayInputStream fis = new FragmentedByteArrayInputStream(
                 "$30\r\n012345678901234567890123456789\r\n".getBytes());
         byte[] response = (byte[]) Protocol.read(new RedisInputStream(fis));
@@ -56,21 +56,21 @@ public class ProtocolTest extends JedisTestBase {
     }
 
     @Test
-    public void nullBulkReply() {
+    public void nullBulkReply() throws IOException {
         InputStream is = new ByteArrayInputStream("$-1\r\n".getBytes());
         String response = (String) Protocol.read(new RedisInputStream(is));
         assertEquals(null, response);
     }
 
     @Test
-    public void singleLineReply() {
+    public void singleLineReply() throws IOException {
         InputStream is = new ByteArrayInputStream("+OK\r\n".getBytes());
         byte[] response = (byte[]) Protocol.read(new RedisInputStream(is));
         assertArrayEquals(SafeEncoder.encode("OK"), response);
     }
 
     @Test
-    public void integerReply() {
+    public void integerReply() throws IOException {
         InputStream is = new ByteArrayInputStream(":123\r\n".getBytes());
         long response = (Long) Protocol.read(new RedisInputStream(is));
         assertEquals(123, response);
@@ -78,7 +78,7 @@ public class ProtocolTest extends JedisTestBase {
 
     @SuppressWarnings("unchecked")
     @Test
-    public void multiBulkReply() {
+    public void multiBulkReply() throws IOException {
         InputStream is = new ByteArrayInputStream(
                 "*4\r\n$3\r\nfoo\r\n$3\r\nbar\r\n$5\r\nHello\r\n$5\r\nWorld\r\n"
                         .getBytes());
@@ -95,7 +95,7 @@ public class ProtocolTest extends JedisTestBase {
 
     @SuppressWarnings("unchecked")
     @Test
-    public void nullMultiBulkReply() {
+    public void nullMultiBulkReply() throws IOException {
         InputStream is = new ByteArrayInputStream("*-1\r\n".getBytes());
         List<String> response = (List<String>) Protocol
                 .read(new RedisInputStream(is));

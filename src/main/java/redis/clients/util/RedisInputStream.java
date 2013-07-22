@@ -20,8 +20,6 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import redis.clients.jedis.exceptions.JedisConnectionException;
-
 public class RedisInputStream extends FilterInputStream {
 
     protected final byte buf[];
@@ -43,51 +41,52 @@ public class RedisInputStream extends FilterInputStream {
     public byte readByte() throws IOException {
         if (count == limit) {
             fill();
+            if(limit == -1) {
+            	throw new IOException(
+                        "It seems like server has closed the connection.");
+            }
         }
 
         return buf[count++];
     }
 
-    public String readLine() {
+    public String readLine() throws IOException {
         int b;
         byte c;
         StringBuilder sb = new StringBuilder();
 
-        try {
-            while (true) {
+        while (true) {
+            if (count == limit) {
+                fill();
+            }
+            if (limit == -1)
+                break;
+
+            b = buf[count++];
+            if (b == '\r') {
                 if (count == limit) {
                     fill();
                 }
-                if (limit == -1)
+
+                if (limit == -1) {
+                    sb.append((char) b);
                     break;
-
-                b = buf[count++];
-                if (b == '\r') {
-                    if (count == limit) {
-                        fill();
-                    }
-
-                    if (limit == -1) {
-                        sb.append((char) b);
-                        break;
-                    }
-
-                    c = buf[count++];
-                    if (c == '\n') {
-                        break;
-                    }
-                    sb.append((char) b);
-                    sb.append((char) c);
-                } else {
-                    sb.append((char) b);
                 }
+
+                c = buf[count++];
+                if (c == '\n') {
+                    break;
+                }
+                sb.append((char) b);
+                sb.append((char) c);
+            } else {
+                sb.append((char) b);
             }
-        } catch (IOException e) {
-            throw new JedisConnectionException(e);
         }
+
         String reply = sb.toString();
         if (reply.length() == 0) {
-            throw new JedisConnectionException(
+            throw new IOException(
                     "It seems like server has closed the connection.");
         }
         return reply;

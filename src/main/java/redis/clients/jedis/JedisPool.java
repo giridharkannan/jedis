@@ -60,15 +60,15 @@ public class JedisPool extends Pool<Jedis> {
                      final int database) {
         super(poolConfig, new JedisFactory(host, port, timeout, password, database));
     }
-
-
-    public void returnBrokenResource(final BinaryJedis resource) {
-    	returnBrokenResourceObject(resource);
+    
+    public void returnResource(final Jedis resource) {
+    	if(resource.isConnected()) {
+    		returnResourceObject(resource);
+    	} else {
+    		returnBrokenResourceObject(resource);
+    	}
     }
     
-    public void returnResource(final BinaryJedis resource) {
-    	returnResourceObject(resource);
-    }
     
     /**
      * PoolableObjectFactory custom impl.
