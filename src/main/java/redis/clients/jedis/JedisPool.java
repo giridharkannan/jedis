@@ -61,7 +61,11 @@ public class JedisPool extends Pool<Jedis> {
         super(poolConfig, new JedisFactory(host, port, timeout, password, database));
     }
     
-    public void returnResource(final Jedis resource) {
+    public void returnBrokenResource(final BinaryJedis resource) {
+    	returnBrokenResourceObject(resource);
+    }
+    
+    public void returnResource(final BinaryJedis resource) {
     	if(resource.isConnected()) {
     		returnResourceObject(resource);
     	} else {
@@ -69,6 +73,10 @@ public class JedisPool extends Pool<Jedis> {
     	}
     }
     
+    @Override
+    public void returnResource(final Jedis resource) {
+    	returnResource((BinaryJedis)resource);
+    }
     
     /**
      * PoolableObjectFactory custom impl.
